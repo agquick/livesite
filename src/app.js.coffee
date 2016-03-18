@@ -4,7 +4,7 @@ cors = require('cors')
 io = require('socket.io')(http)
 redis = require('redis')
 
-redis_url = "redis://#{process.env.REDIS_HOST}"
+redis_url = process.env.REDIS_URL
 redis_sub_client = redis.createClient(redis_url)
 redis_client = redis.createClient(redis_url)
 
@@ -91,6 +91,6 @@ io.on 'connection', (socket)->
 
 
 
-server_port = process.env.PORT
+server_port = process.env.LIVESITE_PORT
 http.listen server_port, ->
 	console.log("Listening on *:#{server_port}")
