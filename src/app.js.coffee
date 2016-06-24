@@ -10,19 +10,6 @@ redis_client = redis.createClient(redis_url)
 
 app.use(cors(origin: true, credentials: true))
 
-class Channel
-	constructor : ->
-		@subscriptions = []
-	isSocketSubscribed : (socket)=>
-		i = @subscriptions.indexOf(socket)
-		return i != -1
-	subscribe : (socket)=>
-		return if @isSocketSubscribed(socket)
-		@subscriptions.push(socket)
-	unsubscribe : (socket)=>
-		i = @subscriptions.indexOf(socket)
-		@subscriptions.splice(i, 1)
-
 
 # subscription code
 channels = {}
@@ -37,10 +24,11 @@ remove_subscription = (channel_name, socket)->
 app.get '/', (req, res)->
 	#res.set('Access-Control-Allow-Origin', '*')
 	# Load keys from Redis
+	scope = req.query.scope
 	model = req.query.model
-	console.log "REQUEST /: model: #{model}"
-	redis_client.smembers "#{model}:ids", (err, rs)->
-		ids = rs.map (id)-> "#{model}:#{id}"
+	console.log "REQUEST /: model: #{model} in #{scope}"
+	redis_client.smembers "#{scope}:#{model}:ids", (err, rs)->
+		ids = rs.map (id)-> "#{scope}:#{model}:#{id}"
 		if ids.length > 0
 			console.log("Found ids: #{JSON.stringify(ids)}")
 			redis_client.mget ids, (err, rs)->
@@ -58,7 +46,7 @@ app.post '/', (req, res)->
 redis_sub_client.on "message", (channel, msg_data)->
 	# get channel name from message
 	msg = JSON.parse(msg_data)
-	room = msg.model
+	room = msg.scope
 	io.to(room).emit(msg.event, msg)
 	console.log("Handling model.updated message from redis")
 
@@ -71,20 +59,23 @@ io.on 'connection', (socket)->
 	socket.on 'subscribe', (channel_name)->
 		socket.join(channel_name)
 		console.log "Handling subscription to #{channel_name}"
+
 	# handle channel unsubscribe request
 	socket.on 'unsubscribe', (channel_name)->
 		socket.leave(channel_name)
+
 	socket.on 'model.updated', (msg)->
 		msg.action ||= "updated"
+		scope = msg.scope
 		model = msg.model
 		action = msg.action
 		data = msg.data
 		msg.event = "#{model}.#{action}"
 		# store data to Redis
-		model_key = "#{model}:#{data.id}"
+		model_key = "#{scope}:#{model}:#{data.id}"
 		redis_client.set(model_key, JSON.stringify(data))
 		#redis_client.expire(model_key, 60)
-		redis_client.sadd("#{model}:ids", data.id)
+		redis_client.sadd("#{scope}:#{model}:ids", data.id)
 		# emit event to Redis
 		redis_client.publish("model.updated", JSON.stringify(msg))
 		console.log("Updated redis with data: #{JSON.stringify(data)}")
