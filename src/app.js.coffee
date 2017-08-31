@@ -11,16 +11,6 @@ redis_client = redis.createClient(redis_url)
 app.use(cors(origin: true, credentials: true))
 
 
-# subscription code
-channels = {}
-add_subscription = (channel_name, socket)->
-  ch = channels[channel_name]
-  ch.subscribe(socket)
-remove_subscription = (channel_name, socket)->
-  ch = channels[channel_name]
-  ch.unsubscribe(socket)
-
-
 app.get '/', (req, res)->
   #res.set('Access-Control-Allow-Origin', '*')
   # Load keys from Redis
@@ -52,6 +42,7 @@ redis_sub_client.on "message", (channel, msg_data)->
 
 redis_sub_client.on 'ready', ->
   redis_sub_client.subscribe("model.updated")
+  redis_sub_client.subscribe("model.deleted")
 
 # handle websockets
 io.on 'connection', (socket)->
@@ -82,6 +73,18 @@ io.on 'connection', (socket)->
     redis_client.publish("model.updated", JSON.stringify(msg))
     console.log("Updated redis with data: #{JSON.stringify(data)}")
 
+  socket.on 'model.deleted', (msg)->
+    msg.action ||= "deleted"
+    scope = msg.scope
+    model = msg.model
+    action = msg.action
+    data = msg.data
+    msg.event = "#{model}.#{action}"
+    model_key = "#{scope}:#{model}:#{data.id}"
+    redis_client.del(model_key)
+    redis_client.srem("#{scope}:#{model}:ids", data.id)
+    redis_client.publish("model.deleted", JSON.stringify(msg))
+    console.log("Deleted data from redis: #{JSON.stringify(data)}")
 
 
 server_port = process.env.LIVESITE_PORT
