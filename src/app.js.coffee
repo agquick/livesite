@@ -88,6 +88,9 @@ app.use(express.json())
 #app.use(express.urlencoded(extended: true))
 
 app.get '/', (req, res)->
+  res.json(success: true, data: {})
+
+app.get '/models', (req, res)->
   scope = req.query.scope
   authenticateRequest req, res, (auth)->
     authorizeScope(scope, auth)
